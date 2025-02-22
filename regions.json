@@ -1,0 +1,23 @@
+{
+    "power": {
+        "name": "power",
+        "x": 100,
+        "y": 100,
+        "width": 50,
+        "height": 50
+    },
+    "start": {
+        "name": "start",
+        "x": 200,
+        "y": 100,
+        "width": 50,
+        "height": 50
+    },
+    "stop": {
+        "name": "stop",
+        "x": 300,
+        "y": 100,
+        "width": 50,
+        "height": 50
+    }
+}

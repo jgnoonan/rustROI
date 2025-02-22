@@ -1,0 +1,4 @@
+/target
+/kaldi
+*.zip
+/vosk-api
