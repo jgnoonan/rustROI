@@ -18,19 +18,22 @@ fn build_input_stream(
 ) -> Result<cpal::Stream> {
     let detector = Arc::new(Mutex::new(AudioDetector::new()));
 
+    let err_fn = move |err| {
+        eprintln!("Error in audio stream: {:?}", err);
+    };
+
+    let data_fn = move |data: &[f32], _: &cpal::InputCallbackInfo| {
+        if let Ok(mut detector) = detector.lock() {
+            if let Some(command) = detector.process_audio(data) {
+                let _ = tx.send(gui::AppCommand::Click(command));
+            }
+        }
+    };
+
     Ok(input_device.build_input_stream(
         config,
-        move |data: &[f32], _: &cpal::InputCallbackInfo| {
-            if let Ok(mut detector) = detector.lock() {
-                if let Some(command) = detector.process_audio(data) {
-                    let _ = tx.send(gui::AppCommand::Click(command));
-                }
-            }
-        },
-        move |err| {
-            eprintln!("Error in audio stream: {:?}", err);
-        },
-        None,
+        data_fn,
+        err_fn,
     )?)
 }
 
@@ -52,7 +55,7 @@ fn main() -> Result<()> {
                 false
             }
         })
-        .ok_or_else(|| anyhow!("Failed to find camera microphone. Please ensure it is connected."))?;
+        .ok_or_else(|| anyhow!("Could not find Insta360 microphone"))?;
     
     println!("Audio host: {}", host.id().name());
     println!("Using input device: {}", input_device.name()?);
@@ -72,42 +75,15 @@ fn main() -> Result<()> {
 
     println!("Using audio config: {:?}", config);
 
-    // Create channels for communication between audio and GUI threads
+    // Create a channel for sending commands from the audio thread to the GUI
     let (tx, rx) = std::sync::mpsc::channel();
-    let (command_tx, command_rx) = std::sync::mpsc::channel();
 
-    // Start audio processing in a separate thread
-    let audio_thread = std::thread::spawn(move || {
-        println!("Building input stream...");
-        match build_input_stream(&input_device, &config, tx) {
-            Ok(stream) => {
-                println!("Starting audio stream...");
-                stream.play().unwrap();
-                println!("Audio stream started successfully");
+    // Build the input stream
+    let stream = build_input_stream(&input_device, &config, tx)?;
+    stream.play()?;
 
-                // Keep the stream alive
-                loop {
-                    if let Ok(_) = command_rx.try_recv() {
-                        break;
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(100));
-                }
-            }
-            Err(err) => {
-                println!("Error building input stream: {}", err);
-            }
-        }
-    });
-
-    // Run GUI on the main thread
-    if let Err(err) = gui::run_gui(rx, command_tx, roi_controller) {
-        println!("Error: GUI thread error: {}", err);
-    }
-
-    // Wait for audio thread to finish
-    if let Err(err) = audio_thread.join() {
-        println!("Error: Audio thread panicked: {:?}", err);
-    }
+    // Start the GUI
+    gui::run(rx, roi_controller)?;
 
     Ok(())
 }

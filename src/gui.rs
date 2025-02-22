@@ -1,7 +1,6 @@
 use iced::{
-    widget::{button, container, row, text, Column},
-    Application, Command, Element, Settings, Theme, Length,
-    time::every,
+    Application, Element, Command, Settings, Container, Row, Column, Text, Button, Length,
+    button, text, time,
 };
 use std::sync::{mpsc, Arc, Mutex};
 use crate::roi_controller::ROIController;
@@ -20,7 +19,6 @@ pub enum AppCommand {
 
 pub struct TestInterface {
     command_rx: mpsc::Receiver<AppCommand>,
-    command_tx: mpsc::Sender<()>,
     roi_controller: Arc<Mutex<ROIController>>,
     status_text: String,
     power_state: bool,
@@ -30,16 +28,14 @@ pub struct TestInterface {
 
 impl Application for TestInterface {
     type Message = Message;
-    type Theme = Theme;
     type Executor = iced::executor::Default;
-    type Flags = (mpsc::Receiver<AppCommand>, mpsc::Sender<()>, Arc<Mutex<ROIController>>);
+    type Flags = (mpsc::Receiver<AppCommand>, Arc<Mutex<ROIController>>);
 
     fn new(flags: Self::Flags) -> (Self, Command<Message>) {
         (
             TestInterface {
                 command_rx: flags.0,
-                command_tx: flags.1,
-                roi_controller: flags.2,
+                roi_controller: flags.1,
                 status_text: String::from("Waiting for voice commands..."),
                 power_state: false,
                 start_state: false,
@@ -69,7 +65,6 @@ impl Application for TestInterface {
                 Command::none()
             }
             Message::Exit => {
-                let _ = self.command_tx.send(());
                 Command::none()
             }
             Message::Tick => {
@@ -100,80 +95,51 @@ impl Application for TestInterface {
         let start_text = if self.start_state { "Go ON" } else { "Go OFF" };
         let stop_text = if self.stop_state { "Stop ON" } else { "Stop OFF" };
 
-        let power_button = button(power_text)
-            .width(Length::Fixed(150.0))
-            .style(if self.power_state {
-                iced::theme::Button::Positive
-            } else {
-                iced::theme::Button::Secondary
-            })
-            .on_press(Message::ButtonPressed("power"));
+        let power_button = Button::new(text(power_text))
+            .on_press(Message::ButtonPressed("power"))
+            .padding(10);
 
-        let start_button = button(start_text)
-            .width(Length::Fixed(150.0))
-            .style(if self.start_state {
-                iced::theme::Button::Positive
-            } else {
-                iced::theme::Button::Secondary
-            })
-            .on_press(Message::ButtonPressed("start"));
+        let start_button = Button::new(text(start_text))
+            .on_press(Message::ButtonPressed("start"))
+            .padding(10);
 
-        let stop_button = button(stop_text)
-            .width(Length::Fixed(150.0))
-            .style(if self.stop_state {
-                iced::theme::Button::Positive
-            } else {
-                iced::theme::Button::Secondary
-            })
-            .on_press(Message::ButtonPressed("stop"));
+        let stop_button = Button::new(text(stop_text))
+            .on_press(Message::ButtonPressed("stop"))
+            .padding(10);
 
-        let exit_button = button("Exit")
-            .width(Length::Fixed(150.0))
-            .style(iced::theme::Button::Destructive)
-            .on_press(Message::Exit);
+        let exit_button = Button::new(text("Exit"))
+            .on_press(Message::Exit)
+            .padding(10);
 
-        let buttons = row![power_button, start_button, stop_button]
+        let button_row = Row::new()
             .spacing(20)
-            .padding(20);
+            .push(power_button)
+            .push(start_button)
+            .push(stop_button)
+            .push(exit_button);
 
-        let content = Column::new()
-            .push(status)
-            .push(buttons)
-            .push(exit_button)
+        Column::new()
             .spacing(20)
             .padding(20)
-            .width(Length::Fill)
-            .align_items(iced::Alignment::Center);
-
-        container(content)
+            .push(status)
+            .push(button_row)
             .width(Length::Fill)
             .height(Length::Fill)
-            .center_x()
-            .center_y()
             .into()
     }
 
     fn subscription(&self) -> iced::Subscription<Message> {
-        every(std::time::Duration::from_millis(100))
+        time::every(std::time::Duration::from_millis(100))
             .map(|_| Message::Tick)
     }
 }
 
-pub fn run_gui(
+pub fn run(
     command_rx: mpsc::Receiver<AppCommand>,
-    command_tx: mpsc::Sender<()>,
     roi_controller: Arc<Mutex<ROIController>>,
 ) -> anyhow::Result<()> {
-    let mut settings = Settings::with_flags((command_rx, command_tx, roi_controller));
-    settings.window.size = (600, 300);
-    settings.window.resizable = false;
-    settings.window.decorations = true;
-    settings.window.transparent = false;
-    settings.window.level = iced::window::Level::AlwaysOnTop;  // Keep window on top
-    settings.window.position = iced::window::Position::Specific(20, 20);
-    settings.antialiasing = true;
-    settings.exit_on_close_request = false;  // Prevent window from closing when clicking other windows
-
-    TestInterface::run(settings)?;
+    let mut settings = Settings::default();
+    settings.window.size = (400, 200);
+    TestInterface::run(settings, (command_rx, roi_controller))?;
     Ok(())
 }
