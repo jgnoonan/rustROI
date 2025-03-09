@@ -1,22 +1,22 @@
 {
     "power": {
         "name": "power",
-        "x": 100,
-        "y": 100,
+        "x": 200,
+        "y": 400,
         "width": 50,
         "height": 50
     },
     "start": {
         "name": "start",
-        "x": 200,
-        "y": 100,
+        "x": 640,
+        "y": 400,
         "width": 50,
         "height": 50
     },
     "stop": {
         "name": "stop",
-        "x": 300,
-        "y": 100,
+        "x": 1080,
+        "y": 400,
         "width": 50,
         "height": 50
     }

@@ -5,10 +5,18 @@ edition = "2018"
 
 [dependencies]
 anyhow = "1.0.31"
-cpal = "0.12.1"
-iced = { version = "0.3", features = ["tokio"] }
+eframe = { version = "0.22.0", default-features = false, features = ["glow"] }
 mouse-rs = "0.4"
+gtk = { version = "0.7", package = "gtk4" }
+glib = "0.18"
 serde = { version = "1.0.110", features = ["derive"] }
 serde_json = "1.0.53"
 tokio = { version = "0.2", features = ["full"] }
-vosk = "0.2"
+# Temporarily removed vosk dependency for development
+# vosk = "0.2"
+
+[target.'cfg(target_arch = "aarch64")'.dependencies]
+# Add any ARM-specific dependencies here
+
+[features]
+default = []

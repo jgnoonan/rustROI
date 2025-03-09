@@ -1,89 +1,58 @@
-use anyhow::{Result, anyhow};
-use cpal;
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use std::sync::{Arc, Mutex};
+use anyhow::Result;
+use std::sync::{Arc, Mutex, mpsc};
+use std::thread;
+use std::time::Duration;
 
-mod gui;
+mod egui_gui;
 mod roi_controller;
 mod audio_detector;
 
-use audio_detector::AudioDetector;
+// Use the egui_gui module for AppCommand
+use egui_gui::AppCommand;
+use roi_controller::ROIController;
 
-const SAMPLE_RATE: u32 = 48000;
+// Simulate audio commands with a simple timer thread
+fn start_command_simulator(tx: mpsc::Sender<AppCommand>) {
+    thread::spawn(move || {
+        let mut detector = audio_detector::AudioDetector::new();
+        let dummy_data = vec![0.0f32; 1024]; // Dummy audio data
 
-fn build_input_stream(
-    input_device: &cpal::Device,
-    config: &cpal::StreamConfig,
-    tx: std::sync::mpsc::Sender<gui::AppCommand>,
-) -> Result<cpal::Stream> {
-    let detector = Arc::new(Mutex::new(AudioDetector::new()));
-
-    let err_fn = move |err| {
-        eprintln!("Error in audio stream: {:?}", err);
-    };
-
-    let data_fn = move |data: &[f32], _: &cpal::InputCallbackInfo| {
-        if let Ok(mut detector) = detector.lock() {
-            if let Some(command) = detector.process_audio(data) {
-                let _ = tx.send(gui::AppCommand::Click(command));
+        loop {
+            // Process dummy audio data to get simulated commands
+            if let Some(command) = detector.process_audio(&dummy_data) {
+                let _ = tx.send(AppCommand::Click(command));
             }
-        }
-    };
 
-    Ok(input_device.build_input_stream(
-        config,
-        data_fn,
-        err_fn,
-    )?)
+            // Sleep to avoid consuming too much CPU
+            thread::sleep(Duration::from_millis(100));
+        }
+    });
 }
 
 fn main() -> Result<()> {
     // Initialize ROI Controller
-    let mut roi_controller = roi_controller::ROIController::new();
-    roi_controller.load_regions_from_file("regions.json")?;
-    let roi_controller = Arc::new(Mutex::new(roi_controller));
+    let roi_controller = Arc::new(Mutex::new(ROIController::new()));
 
-    // Initialize audio
-    let host = cpal::default_host();
-    
-    // Find camera microphone
-    let input_device = host.input_devices()?
-        .find(|device| {
-            if let Ok(name) = device.name() {
-                name.to_lowercase().contains("insta360")
-            } else {
-                false
-            }
-        })
-        .ok_or_else(|| anyhow!("Could not find Insta360 microphone"))?;
-    
-    println!("Audio host: {}", host.id().name());
-    println!("Using input device: {}", input_device.name()?);
-
-    // Get supported configs
-    let supported_configs = input_device.supported_input_configs()?;
-    println!("Supported configs:");
-    for config in supported_configs {
-        println!("  {:?}", config);
+    // Load regions from file (if available)
+    {
+        let mut controller = roi_controller.lock().unwrap();
+        let regions_result = controller.load_regions_from_file("regions.json");
+        if let Err(e) = regions_result {
+            println!("Warning: Could not load regions from file: {}", e);
+            println!("Continuing with default regions...");
+        }
     }
 
-    let config = cpal::StreamConfig {
-        channels: 1,
-        sample_rate: cpal::SampleRate(SAMPLE_RATE),
-        buffer_size: cpal::BufferSize::Default,
-    };
+    // Create a channel for sending commands from the simulator thread to the GUI
+    let (tx, rx) = mpsc::channel();
 
-    println!("Using audio config: {:?}", config);
+    // Start the command simulator in a separate thread
+    println!("Starting command simulator for testing...");
+    start_command_simulator(tx);
 
-    // Create a channel for sending commands from the audio thread to the GUI
-    let (tx, rx) = std::sync::mpsc::channel();
-
-    // Build the input stream
-    let stream = build_input_stream(&input_device, &config, tx)?;
-    stream.play()?;
-
-    // Start the GUI
-    gui::run(rx, roi_controller)?;
+    // Start the GUI using GTK4 implementation (not egui)
+    println!("Starting GUI with GTK4 implementation...");
+    egui_gui::run(rx, roi_controller)?;
 
     Ok(())
 }
